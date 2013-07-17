@@ -1,0 +1,395 @@
+import Bio
+import numpy
+import copy
+from numpy import matrix
+#from operator import itemgetter
+from parsers import bondLength
+
+
+from Bio.PDB.PDBParser import PDBParser
+
+parser=PDBParser()
+
+structure=parser.get_structure("test", "../peptides/antibiotic_peptide.pdb")
+model=structure[0]
+
+
+bLength = bondLength.getBondsMap()
+
+
+
+		
+
+def makeGraph(mol):
+	
+	
+	gHash = {}
+	atoms = list(mol.get_atoms())
+	nodes = atoms
+	size = len(atoms)
+	dist = getDist(mol,1)
+	edges = [[] for i in range(size)]
+	for i,atom1 in enumerate(atoms):
+		for j,atom2 in enumerate(atoms[:i]):
+			bond = atom1.element + "-" + atom2.element
+			if dist[i][j] < bLength[bond]:
+				 edges[i].append(j)
+				 edges[j].append(i)
+				
+	
+	return nodes,edges
+
+			
+				
+
+
+def getDist(mol,full):
+	atoms = list(mol.get_atoms())
+	size = len(atoms)
+	dist = numpy.zeros(shape=(size,size))
+	for i,at1 in enumerate(atoms):
+		for j,at2 in enumerate(atoms):
+			if i == j:
+				break
+			else:
+				dist[i][j] = numpy.linalg.norm(at1.get_coord()-at2.get_coord())
+				if full:
+					dist[j][i] = dist[i][j]
+	return dist
+
+def getMinDist(dist,flags,unfinished):
+	minval = float("inf")
+	minind = -1
+	for i,node in enumerate(unfinished):
+		if flags[i] == 0 and dist[node] < minval:
+			minval = dist[node]
+			minind = i
+	return minind, minval
+
+
+def BFS(edges,start):
+	if edges == []:
+		print "Edges empty"
+		return None
+	gSize = len(edges)
+	prev = [-1 for i in range(gSize)]
+	q = set()
+	q.add(start)
+	F = []
+	while not len(q) == 0:
+		curr = q.pop()
+		for i in edges[curr]:
+			if i not in F:
+				q.add(i)
+				prev[i] = curr
+		F.append(curr)
+	
+	return prev
+
+def singleBFS(edges,start,stop):
+	if edges == []:
+		print "Edges empty"
+		return None
+	gSize = len(edges)
+	prev = [-1 for i in range(gSize)]
+	q = set()
+	q.add(start)
+	F = []
+	while not len(q) == 0:
+		curr = q.pop()
+		for i in edges[curr]:
+			q.add(i)
+			prev[i] = curr
+		F.add(curr)
+		if(curr == stop):
+			break
+	return prev
+
+
+def dijkstra(edges,start):
+	if edges == []:
+		print "Edges empty"
+		return None
+	gSize = len(edges)
+	
+	dist = [float("Inf") for i in range(gSize)]
+	prev = [-1 for i in range(gSize)]
+	dist[start] = 0
+	F = []
+	U = range(gSize)
+	flags = [0 for i in range(gSize)]
+	
+	while 0 in flags:
+		minindex, minvalue = getMinDist(dist,flags,U)
+		v = int(minindex)
+		F.append(v)
+		flags[v] = 1
+		for v2, edge in enumerate(edges[v]):
+			if dist[v] + 1 < dist[edge]:
+				dist[edge] = dist[v] + 1
+				prev[edge] = v
+	return dist,prev
+	
+def dijkstraSingle(edges,start,stop):
+	print "dijkastra single started"
+	print edges[start]
+	if edges == []:
+		print "Edges empty"
+		return None
+	gSize = len(edges)
+	dist = [float("Inf") for i in range(gSize)]
+	prev = [-1 for i in range(gSize)]
+	dist[start] = 0
+	F = []
+	U = range(gSize)
+	flags = [0 for i in range(gSize)]
+	
+	while 0 in flags:
+		minindex, minvalue = getMinDist(dist,flags,U)
+		v = int(minindex)
+		F.append(v)
+		flags[v] = 1
+		for v2, edge in enumerate(edges[v]):
+			if dist[v] + 1 < dist[edge]:
+				dist[edge] = dist[v] + 1
+				prev[edge] = v
+		#if target node has been reached, stop
+		if v == stop:
+			break
+	print "dijkastra single finished"	
+	return dist,prev
+'''	
+def calcAllShortestPath(edges):
+	gSize = len(edges)
+	shortestPath = [[[] for i in range(gSize)] for j in range(gSize)]
+	for i in range(gSize):
+		
+		dist, prev = dijkstra(edges,i)
+		
+		for j in range(i+1,gSize):
+			path = traceShortest(j,i,prev)
+			shortestPath[i][j] = path
+			shortestPath[j][i] = path
+			
+	return shortestPath
+'''
+def calcAllShortestPath(edges):
+	gSize = len(edges)
+	shortestPath = [[[] for i in range(gSize)] for j in range(gSize)]
+	for i in range(gSize):
+	
+	
+	#determine nodes that i has no connection to
+		validEdges = allAbove(edges[i],i) #get all edges that have not been considered
+		diff = set.difference(set(range(i+1,gSize)),set(validEdges)) #get all nodes that have not been considered yet and do not have an edge to i
+		#one dijkstra for all in diff
+		prev = BFS(edges,i)
+		for j in diff:
+			path = traceShortest(j,i,prev)
+			shortestPath[i][j] = path
+			shortestPath[j][i] = path
+	
+		#one dijkstra for each edge that i is connected to
+		for j in edges[i]:
+			if len(edges[i]) == 1 or len(edges[j]) == 1:
+					shortestPath[i][j] = []
+					shortestPath[j][i] = []
+					continue
+
+			edgeTMP = copy.deepcopy(edges)
+			edgeTMP[i].remove(j)
+			edgeTMP[j].remove(i)
+
+			prev = singleBFS(edgeTMP,i,j)
+			path = traceShortest(j,i,prev)
+			shortestPath[i][j] = path
+			shortestPath[j][i] = path
+		'''for j in range(i+1,gSize):
+			
+			if j in edges[i]:
+				#handle case that i is not reachable from j
+				if len(edges[i]) == 1 or len(edges[j]) == 1:
+					shortestPath[i][j] = float("Inf")
+					shortestPath[j][i] = float("Inf")
+					continue
+				
+				edgeTMP = copy.deepcopy(edges)
+				edgeTMP[i].remove(j)
+				edgeTMP[j].remove(i)
+
+					
+			else:
+				edgeTMP = edges
+			dist, prev = dijkstraSingle(edgeTMP,i,j)
+			path = traceShortest(j,i,prev)
+			shortestPath[i][j] = path
+			shortestPath[j][i] = path
+			'''
+	return shortestPath
+
+def allAbove(array,value):
+	out = []
+	for elem in array:
+		if elem > value:
+			out.append(elem)
+	return out
+				
+def traceShortest(fr,to,prev):
+	if prev[fr] == float("inf"):
+		return None
+	if prev[fr] == to:
+		return [fr,to]
+	if fr == to:
+		return []
+	path = []
+	last = fr
+	for i in range(1000):
+		path.append(last)
+		last = prev[last]
+		if last == to:
+			break
+	path.append(to)
+	return path
+
+def countSubgraphEdges(subg,gEdges):
+	ecount = 0
+	for n1 in subg:
+		for n2 in subg:
+			if n2 in gEdges[n1]:
+				ecount += 1
+	return ecount / 2
+
+def calcSignMatrix(edges):
+	shortestP = calcAllShortestPath(edges)
+	
+	gSize = len(edges)
+
+	
+
+	
+	signM = [["" for i in range(gSize)] for j in range(gSize)]
+
+	
+	for i in range(gSize):
+		for j in range(gSize):
+			if i == j:
+				signM[i][j] = "-0.1.0"
+				continue
+			#if shortestP[i][j] == None:
+			#	print str(i) + " - " + str(j) + " <-"
+			#	return 0
+				
+			if j in edges[i]:
+				prefix = "+"
+			else:
+				prefix = "-"
+			duv = len(shortestP[i][j])-1
+			nuv = len(shortestP[i][j])
+			muv = countSubgraphEdges(shortestP[i][j],edges)
+			
+			sign = prefix + str(duv) +"." + str(nuv)+"." + str(muv)
+			
+			
+			signM[i][j] = sign
+	return signM
+
+#signList: vector of different signs found in alphabetical order
+#freqMatrix list of frequency vectors 
+def calcSignFrequencies(signM):
+	signSet = set()
+	freqList = []
+	for i, row in enumerate(signM):
+		freqList.append(freqInRow(row,signSet))
+		
+	signList = list(signSet)
+	
+	signList.sort()
+	freqMatrix = []
+	
+	for freq in freqList:
+		freqVector = [0 for i in range(len(signList))]
+		
+		for sign in freq.keys():
+			ind = signList.index(sign)
+			freqVector[ind] = freq[sign] #assign frequency value from hash map to correct position in frequency matrix
+		freqMatrix.append(freqVector)
+			
+	
+	reorder = sorted(range(len(freqMatrix)), key= lambda k: freqMatrix[k]) # compute reordering of frequency matrix in row major order
+
+	makeOrder(freqMatrix,reorder)
+	return signList,freqMatrix,reorder
+	
+def makeOrder(v,order):
+	if not len(v) == len(order):
+		print "reorder was given 2 arguments with different length"
+		return None
+	
+	for i, index in enumerate(order):
+		tmp = v[i]
+		v[i] = v[index]
+		v[index] = tmp
+	
+#count element e +1 in hash h
+def addToHash(h,e):
+	if h.has_key(e):
+		h[e] += 1
+	else:
+		h[e] = 1
+		
+
+def freqInRow(v,signSet):
+	freq = {}
+	for elem in v:
+		addToHash(freq,elem)
+		signSet.add(elem)
+	return freq
+
+'''
+swaps two rows of a matrix while updating the indices of the reordering
+'''
+def swapRow(array,ind1,ind2,reorder):
+	tmp = array[ind1]
+	tmpInd = reorder[ind1]
+	array[ind1] = array[ind2]
+	array[ind2] = tmp
+	reorder[ind1] = reorder[ind2]
+	reorder[ind] = tmpInd
+
+def getIsomorphism(edges1,edges2):
+	if not len(edges1) == len(edges2):
+		return 0
+	gSize = len(edges1)
+	
+	signM1 = calcSignMatrix(edges1)
+	signM2 = calcSignMatrix(edges2)
+	signList1,signFreq1,reorder1 = calcSignFrequencies(signM1)
+	signList2,signFreq2,reorder2 = calcSignFrequencies(signM2)
+	if not signList1 == signList2:
+		return 0
+	
+	for i, row1 in enumerate(signFreq1):
+		if not signFreq1[i] == signFreq2[i]:
+			flag = False
+			for j in range(i+1,gSize):
+				if signFreq1[i] == signFreq2[j]:
+					flag = True
+					swapRow(signFreq2,i,j,reorder2)
+					break
+			if not flag:
+				print "There is no isomorphism, aborted at index " + i
+				return 0
+	return reorder1,reorder2
+
+nodes,edges = makeGraph(model)
+
+signM = calcSignMatrix(edges)
+signList,signFreq,reorder=  calcSignFrequencies(signM)
+
+
+print getIsomorphism(edges,edges)
+
+#dist, prev = dijkstra(nodes,edges,7)
+#print dist
+#print prev
+
